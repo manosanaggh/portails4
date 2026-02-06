@@ -894,10 +894,11 @@ void bximsg_ack(struct bximsg_iface *iface, struct bximsg_conn *conn, unsigned i
 			buf_len = bximsg_conn_log(conn, sizeof(buf), buf);
 			buf_len += snprintf(buf + buf_len, sizeof(buf) - buf_len, ": ");
 			swptl_ctx_log(f, sizeof(buf) - buf_len, buf + buf_len);
-			ptl_log("%s: releasing message\n", buf);
+			printf("%s: releasing message\n", buf);
 		}
 #endif
 		if (f->pkt_acked == f->pkt_count) {
+			printf("BXIMSG_ACK snd_end\n");
 			iface->ops->snd_end(iface->arg, f, SWPTL_TRP_OK);
 			conn->stats[BXIMSG_SND_END_NB]++;
 		}
@@ -1022,6 +1023,7 @@ void bximsg_timo(void *arg)
 
 	while ((f = conn->send_qhead) != NULL) {
 		conn->send_qhead = f->next;
+		printf("BXIMSG_TIMO snd_end\n");
 		iface->ops->snd_end(iface->arg, f, 1);
 		conn->stats[BXIMSG_SND_END_NB]++;
 	}
@@ -1087,7 +1089,7 @@ void bximsg_input(void *arg, enum swptl_transport_status status, void *data, siz
 		/* Let the packet through and remember to send a SYN_ACK */
 		conn->peer_synchronizing = 1;
 	}
-
+	printf("BXIMSG_INPUT calling bximsg_ack 1\n");
 	/* handle the send ack, the rest is receive-specific*/
 	bximsg_ack(iface, conn, hdr->ack_seq);
 
@@ -1194,9 +1196,10 @@ void bximsg_input(void *arg, enum swptl_transport_status status, void *data, siz
 		conn->recv_ctx = NULL;
 
 		/* Consider transport error reply as an ack, to avoid retransmits */
-		if (status != SWPTL_TRP_OK)
+		if (status != SWPTL_TRP_OK){
+			printf("BXIMSG_INPUT calling bximsg_ack 2\n");
 			bximsg_ack(iface, conn, conn->send_ack + 1);
-
+		}
 		iface->ops->rcv_end(iface->arg, f, status);
 		conn->stats[BXIMSG_RCV_END_NB]++;
 	}

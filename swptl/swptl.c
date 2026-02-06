@@ -48,11 +48,11 @@
 #define LOG(...) LOGN(1, __VA_ARGS__)
 #else
 #define LOGN(n, ...)                                                                               \
-	do {                                                                                       \
-	} while (0)
-#define LOG(...)                                                                                   \
-	do {                                                                                       \
-	} while (0)
+        do {                                                                                       \
+                if (swptl_verbose >= (n))                                                          \
+                        ptl_log(__VA_ARGS__);                                                      \
+        } while (0)
+#define LOG(...) LOGN(1, __VA_ARGS__)
 #endif
 
 #define SWPTL_MAX_FDS 1024
@@ -1004,6 +1004,7 @@ void swptl_eq_putev(struct swptl_eq *eq, ptl_event_kind_t type, ptl_ni_fail_t ni
 	e->ev.uid = uid;
 	if (SWPTL_ISCOMM(type) || SWPTL_ISOVER(type) || type == PTL_EVENT_SEARCH) {
 		if (SWPTL_ISPHYSICAL(eq->ni->vc)) {
+			printf("PUTEV isphysical nid.pid\n");
 			e->ev.initiator.phys.nid = nid;
 			e->ev.initiator.phys.pid = pid;
 		} else
@@ -1219,10 +1220,15 @@ void swptl_postcomm(struct swptl_pte *pte, int meopt, struct swptl_ct *ct, int t
 	    (SWPTL_ISCOMM(type) && (meopt & PTL_ME_EVENT_COMM_DISABLE)) ||
 	    (SWPTL_ISFCTRL(type) && (meopt & PTL_ME_EVENT_FLOWCTRL_DISABLE)) ||
 	    (fail == PTL_NI_OK && (meopt & PTL_ME_EVENT_SUCCESS_DISABLE))) {
-		LOGN(2, "%s: not posted, disabled by meopt = 0x%x\n", __func__, meopt);
+		printf("POSTCOMM COMM_DISABLE nid = %d pid = %d\n", nid, pid);
+		printf("%s: not posted, disabled by meopt = 0x%x\n", __func__, meopt);
 	} else if (!pte->eq) {
-		LOGN(2, "%s: not posted, no eq\n", __func__);
+		printf("%s: not posted, no eq\n", __func__);
 	} else {
+		if (!uptr)
+			printf("uptr IS NULL\n");
+		printf("CALLING PUTEV\n");
+		printf("CALLING PUTEV\n");
 		swptl_eq_putev(pte->eq, type, fail, start, uptr, hdr, bits, rlen, mlen, roffs, uid,
 			       nid, pid, rank, -1, /* list */
 			       pte->index, aop, atype);
@@ -1683,7 +1689,7 @@ int swptl_dev_new(struct swptl_ctx *ctx, int nic_iface, int uid, int pid, size_t
 	dev->next = NULL;
 	*pdev = dev;
 
-	LOGN(2, "%s: nid %d, pid = %d\n", __func__, dev->nid, dev->pid);
+	printf("%s: nid %d, pid = %d\n", __func__, dev->nid, dev->pid);
 
 	*out = dev;
 	ptl_mutex_unlock(&ctx->init_mutex, __func__);
@@ -1796,6 +1802,7 @@ int swptl_ni_l2p(struct swptl_ni *ni, int rank, unsigned int *nid, unsigned int 
 	}
 	*nid = ni->map[rank].phys.nid;
 	*pid = ni->map[rank].phys.pid;
+	printf("NI_L2P nid = %d pid = %d\n", nid, pid);
 	return 1;
 }
 
@@ -2094,6 +2101,7 @@ void swptl_me_add(struct swptl_me *me, struct swptl_ni *ni, struct swptl_pte *pt
 	me->offs = 0;
 	me->ct = ct;
 	me->uid = uid;
+	printf("SWPTL_ME_ADD = PtlMEAppend\n");
 	me->opt = opt;
 	me->xfers = 0;
 	me->nid = nid;
@@ -2106,6 +2114,10 @@ void swptl_me_add(struct swptl_me *me, struct swptl_ni *ni, struct swptl_pte *pt
 	     __func__, me, len, uptr, pte->index, list, opt, minfree);
 
 	me->minfree = minfree;
+	if (!uptr)
+		printf("BUF = %p ME_ADD uptr is NULL\n", me->buf);
+	else
+		printf("BUF = %p ME_ADD uptr is OK\n", me->buf);
 	me->uptr = uptr;
 	if (opt & PTL_IOVEC) {
 		me->niov = me->len;
@@ -2339,6 +2351,8 @@ int swptl_cmd(int cmd, struct swptl_ni *ni, struct swptl_md *get_md, ptl_size_t 
 	ctx->bits = bits;
 	if (cmd == SWPTL_SWAP && cst)
 		memcpy(ctx->swapcst, cst, ptl_atsize(atype));
+	if(!uptr)
+		printf("SWPTL_CMD uptr IS NULL\n");
 	ctx->uptr = uptr;
 	ctx->put_md = put_md;
 	ctx->put_mdoffs = put_mdoffs;
@@ -2811,6 +2825,8 @@ flowctrl:
 		ctx->pte->ev = NULL;
 	}
 
+	printf("RCV_QSTART uptr is NULL\n");
+
 	swptl_postcomm(ctx->pte, 0, NULL, PTL_EVENT_PT_DISABLED, ctx->fail, 0, 0, /* aop; atype */
 		       0, 0, 0, /* nid, pid, rank */
 		       0, /* roffs */
@@ -2887,6 +2903,7 @@ void swptl_rcv_qend(struct swptl_ni *ni, struct swptl_sodata *f, enum swptl_tran
 	}
 
 	if (status != SWPTL_TRP_OK || (!SWPTL_ISGET(ctx->cmd) && ctx->ack == PTL_NO_ACK_REQ)) {
+		printf("CALLING TEND\n");
 		swptl_tend(ni, f, status);
 		return;
 	}
@@ -2985,6 +3002,7 @@ void swptl_snd_rdat(struct swptl_ni *ni, struct swptl_sodata *f, size_t msgoffs,
  */
 void swptl_snd_rend(struct swptl_ni *ni, struct swptl_sodata *f, enum swptl_transport_status status)
 {
+	printf("CALLING TEND snd_rend\n");
 	swptl_tend(ni, f, status);
 }
 
@@ -3014,9 +3032,10 @@ void swptl_tend(struct swptl_ni *ni, struct swptl_sodata *f, enum swptl_transpor
 		     ctx->serial);
 		goto end;
 	}
-
+	printf("PORTALS: SWPTL_TEND\n");
 	switch (ctx->cmd) {
 	case SWPTL_PUT:
+		printf("PORTALS: SWPTL_TEND\n");
 		evtype = PTL_EVENT_PUT;
 		break;
 	case SWPTL_GET:
@@ -3046,7 +3065,10 @@ void swptl_tend(struct swptl_ni *ni, struct swptl_sodata *f, enum swptl_transpor
 			ctx->fail = PTL_NI_ARG_INVALID;
 			break;
 		}
-
+		if (!ctx->me->uptr)
+			printf("BUF = %p SWPTL_TEND ctx->me->uptr IS NULL\n", ctx->me->buf);
+		else
+			printf("BUF = %p SWPTL_TEND ctx->me->uptr OK\n", ctx->me->buf);
 		swptl_postcomm(ctx->pte, ctx->me->opt, ctx->me->ct, evtype, ctx->fail, ctx->aop,
 			       ctx->atype, f->conn->nid, f->conn->pid, f->conn->rank,
 			       ctx->query_meoffs, /* XXX: reply_meoffs ? */
@@ -3526,9 +3548,9 @@ int swptl_func_ni_init(struct swptl_dev *dev, unsigned int flags,
 
 	/* we use these bits as index in swptl_dev->nis[] */
 	vc = flags & (PTL_NI_PHYSICAL | PTL_NI_MATCHING);
-
+	printf("BEFORE MUTEX LOCK IN NI INIT\n");
 	ptl_mutex_lock(&dev->lock, __func__);
-
+	printf("AFTER MUTEX LOCK IN NI INIT\n");
 	ni = dev->nis[vc];
 	if (ni != NULL) {
 		ni->initcnt++;
@@ -3583,6 +3605,7 @@ int swptl_func_ni_init(struct swptl_dev *dev, unsigned int flags,
 	ptl_mutex_unlock(&dev->lock, __func__);
 
 	*retni = ni;
+	printf("NIC HANDLE IS OK\n");
 	return PTL_OK;
 }
 
@@ -3903,8 +3926,18 @@ int swptl_func_getid(struct swptl_ni *ni, ptl_process_t *id)
 
 int swptl_func_getphysid(struct swptl_ni *ni, ptl_process_t *id)
 {
+	printf("SWPTL_FUNC_GETPHYSID START\n");
+	if (!id)
+		printf("id == NULL\n");
+	if(!ni)
+		printf("ni == NULL\n");
+	if(&(id->phys))
+		printf("phys == NULL\n");
+	if(ni->dev)
+		printf("dev == NULL\n");
 	id->phys.nid = ni->dev->nid;
 	id->phys.pid = ni->dev->pid;
+	printf("SWPTL_FUNC_GETPHYSID SUCCESS\n");
 	return PTL_OK;
 }
 
@@ -4319,7 +4352,6 @@ int swptl_func_put(struct swptl_md *put_md, ptl_size_t loffs, ptl_size_t len, pt
 {
 	struct swptl_ni *ni = put_md->ni;
 	int rc;
-
 	ptl_mutex_lock(&ni->dev->lock, __func__);
 
 	if ((put_md->opt & PTL_MD_UNRELIABLE) && ack != PTL_NO_ACK_REQ) {
@@ -4328,6 +4360,9 @@ int swptl_func_put(struct swptl_md *put_md, ptl_size_t loffs, ptl_size_t len, pt
 		ptl_mutex_unlock(&ni->dev->lock, __func__);
 		return PTL_ARG_INVALID;
 	}
+
+	if (!uptr)
+		printf("SWPTL_FUNC_PUT uptr IS NULL\n");
 
 	rc = swptl_cmd(SWPTL_PUT, ni, NULL, /* get_md */
 		       0, /* get_mdoffs */
@@ -4349,7 +4384,7 @@ int swptl_func_put(struct swptl_md *put_md, ptl_size_t loffs, ptl_size_t len, pt
 	ptl_mutex_unlock(&ni->dev->lock, __func__);
 	if (!rc)
 		return PTL_FAIL;
-
+	printf("PORTALS: SWPTL_FUNC_PUT PTL_OK\n");
 	return PTL_OK;
 }
 
